@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kundebesøk</title>
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===================== TOPBAR ===================== -->
+  <header class="topbar">
+    <button id="btnBack" class="icon-btn" hidden aria-label="Tilbake">←</button>
+    <h1 id="topbarTitle">Kundebesøk</h1>
+    <button id="btnNewVisit" class="icon-btn" aria-label="Nytt besøk">＋</button>
+  </header>
+
+  <main id="view"></main>
+
+  <div id="toast" class="toast" hidden></div>
+</div>
+
+<!-- ===================== TEMPLATES ===================== -->
+
+<template id="tpl-list">
+  <section class="screen screen-list">
+    <div class="search-row">
+      <input type="search" id="searchInput" placeholder="Søk kunde eller sted…">
+      <select id="filterStatus">
+        <option value="">Alle statuser</option>
+        <option value="planlagt">Planlagt</option>
+        <option value="gjennomfort">Gjennomført</option>
+        <option value="sendt">Rapport sendt</option>
+      </select>
+    </div>
+    <ul id="visitList" class="visit-list"></ul>
+    <p id="emptyState" class="empty-state" hidden>Ingen besøk ennå. Trykk ＋ for å legge til et nytt besøk.</p>
+  </section>
+</template>
+
+<template id="tpl-visit-card">
+  <li class="visit-card" tabindex="0">
+    <div class="visit-card-main">
+      <strong class="vc-customer"></strong>
+      <span class="vc-date"></span>
+    </div>
+    <div class="visit-card-sub">
+      <span class="vc-location"></span>
+      <span class="vc-status-badge"></span>
+    </div>
+  </li>
+</template>
+
+<template id="tpl-detail">
+  <section class="screen screen-detail">
+    <div class="card form-card">
+      <div class="field-row">
+        <label>Kunde
+          <input type="text" id="fCustomer" placeholder="Kundenavn">
+        </label>
+        <label>Status
+          <select id="fStatus">
+            <option value="planlagt">Planlagt</option>
+            <option value="gjennomfort">Gjennomført</option>
+            <option value="sendt">Rapport sendt</option>
+          </select>
+        </label>
+      </div>
+      <div class="field-row">
+        <label>Dato / tid
+          <input type="datetime-local" id="fDate">
+        </label>
+        <label>Sted
+          <input type="text" id="fLocation" placeholder="Adresse / anlegg">
+        </label>
+      </div>
+      <label>Tekniker
+        <input type="text" id="fTekniker" placeholder="Ditt navn">
+      </label>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="notes">Notater</button>
+      <button class="tab-btn" data-tab="photos">Bilder</button>
+      <button class="tab-btn" data-tab="audio">Lydopptak</button>
+    </nav>
+
+    <div class="tab-panel" data-panel="notes">
+      <div class="add-row">
+        <textarea id="noteInput" rows="2" placeholder="Skriv et notat…"></textarea>
+        <button id="btnAddNote" class="btn btn-primary">Legg til</button>
+      </div>
+      <ul id="noteList" class="item-list"></ul>
+    </div>
+
+    <div class="tab-panel" data-panel="photos" hidden>
+      <div class="add-row">
+        <label class="btn btn-primary file-btn">
+          📷 Ta / velg bilde
+          <input type="file" id="photoInput" accept="image/*" capture="environment" multiple hidden>
+        </label>
+      </div>
+      <ul id="photoList" class="photo-grid"></ul>
+    </div>
+
+    <div class="tab-panel" data-panel="audio" hidden>
+      <div class="add-row audio-row">
+        <button id="btnRecord" class="btn btn-primary">🎙️ Start opptak</button>
+        <span id="recordTimer" class="record-timer" hidden>00:00</span>
+      </div>
+      <ul id="audioList" class="item-list"></ul>
+    </div>
+
+    <div class="detail-actions">
+      <button id="btnDeleteVisit" class="btn btn-danger">Slett besøk</button>
+      <button id="btnOpenReport" class="btn btn-accent">Åpne rapport →</button>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-note-item">
+  <li class="item-row">
+    <div class="item-text"></div>
+    <div class="item-meta"></div>
+    <button class="icon-btn danger btn-del" aria-label="Slett">🗑</button>
+  </li>
+</template>
+
+<template id="tpl-photo-item">
+  <li class="photo-item">
+    <img class="photo-thumb" alt="Bilde">
+    <input type="text" class="photo-caption" placeholder="Bildetekst (valgfritt)">
+    <button class="icon-btn danger btn-del" aria-label="Slett">🗑</button>
+  </li>
+</template>
+
+<template id="tpl-audio-item">
+  <li class="item-row audio-item">
+    <audio controls></audio>
+    <input type="text" class="audio-label" placeholder="Merknad (valgfritt)">
+    <button class="icon-btn danger btn-del" aria-label="Slett">🗑</button>
+  </li>
+</template>
+
+<template id="tpl-report">
+  <section class="screen screen-report">
+    <div class="report-toolbar no-print">
+      <button id="btnPrint" class="btn btn-primary">🖨️ Skriv ut / Lagre som PDF</button>
+      <button id="btnShare" class="btn btn-accent" hidden>📤 Del rapport</button>
+      <button id="btnEmail" class="btn">✉️ Send på e-post</button>
+    </div>
+    <article id="reportContent" class="report-paper"></article>
+  </section>
+</template>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

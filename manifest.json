@@ -1,0 +1,14 @@
+{
+  "name": "Kundebesøk",
+  "short_name": "Kundebesøk",
+  "description": "Registrer notater, bilder og lydopptak under kundebesøk, og lag en rapport i etterkant.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
