@@ -1,4 +1,4 @@
-const CACHE_NAME = "kundebesok-v1";
+const CACHE_NAME = "kundebesok-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -25,18 +25,19 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Network-first: always try to fetch the latest app code when online, so a
+// deployed update shows up on next load instead of being stuck behind a
+// stale cache. Only fall back to the cache when the network is unavailable
+// (offline field use), which is the whole point of caching here.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return res;
-        })
-        .catch(() => cached);
-    })
+    fetch(event.request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
