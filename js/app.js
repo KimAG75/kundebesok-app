@@ -137,13 +137,18 @@ function route() {
   revokeObjectUrls();
   if (recorder.isRecording) recorder.stop();
   const hash = location.hash || "#/";
-  const detailMatch = hash.match(/^#\/visit\/([^/]+)\/report$/);
+  const reportMatch = hash.match(/^#\/visit\/([^/]+)\/report$/);
+  const pointMatch = hash.match(/^#\/visit\/([^/]+)\/point\/([^/]+)$/);
   const editMatch = hash.match(/^#\/visit\/([^/]+)$/);
 
-  if (detailMatch) {
+  if (reportMatch) {
     btnBack.hidden = false;
     btnNewVisit.hidden = true;
-    showReport(detailMatch[1]);
+    showReport(reportMatch[1]);
+  } else if (pointMatch) {
+    btnBack.hidden = false;
+    btnNewVisit.hidden = true;
+    showPointDetail(pointMatch[1], pointMatch[2]);
   } else if (editMatch) {
     btnBack.hidden = false;
     btnNewVisit.hidden = true;
@@ -241,6 +246,74 @@ async function showDetail(visitId) {
   [fCustomer, fLocation, fTekniker].forEach((el) => el.addEventListener("input", scheduleSave));
   [fStatus, fDate].forEach((el) => el.addEventListener("change", persistField));
 
+  await renderPoints(visitId);
+
+  document.getElementById("btnAddPoint").addEventListener("click", async () => {
+    const point = await db.createPoint(visitId);
+    scheduleSync(200);
+    location.hash = `#/visit/${visitId}/point/${point.id}`;
+  });
+
+  document.getElementById("btnDeleteVisit").addEventListener("click", async () => {
+    if (!confirm("Slette dette besøket og alt innhold (punkter, bilder, notater, lyd)? Dette kan ikke angres.")) return;
+    await db.deleteVisit(visitId);
+    scheduleSync(200);
+    location.hash = "#/";
+  });
+  document.getElementById("btnOpenReport").addEventListener("click", () => {
+    location.hash = `#/visit/${visitId}/report`;
+  });
+}
+
+async function renderPoints(visitId) {
+  const listEl = document.getElementById("pointList");
+  const emptyState = document.getElementById("pointEmptyState");
+  const points = await db.listPoints(visitId);
+  emptyState.hidden = points.length !== 0;
+  listEl.innerHTML = "";
+
+  for (const p of points) {
+    const card = clone("tpl-point-item");
+    card.querySelector(".point-badge").textContent = `＃${p.number}`;
+    card.querySelector(".point-title").textContent = p.title || "(uten beskrivelse)";
+    const [notes, photos, audioClips] = await Promise.all([
+      db.listNotes(p.id),
+      db.listPhotos(p.id),
+      db.listAudio(p.id),
+    ]);
+    const parts = [];
+    if (notes.length) parts.push(`${notes.length} notat${notes.length > 1 ? "er" : ""}`);
+    if (photos.length) parts.push(`${photos.length} bilde${photos.length > 1 ? "r" : ""}`);
+    if (audioClips.length) parts.push(`${audioClips.length} lyd`);
+    card.querySelector(".point-summary").textContent = parts.join(" · ");
+    card.addEventListener("click", () => (location.hash = `#/visit/${visitId}/point/${p.id}`));
+    listEl.appendChild(card);
+  }
+}
+
+// ---------------------------------------------------------------- point detail screen
+async function showPointDetail(visitId, pointId) {
+  const [visit, point] = await Promise.all([db.getVisit(visitId), db.getPoint(pointId)]);
+  if (!visit || !point) {
+    location.hash = `#/visit/${visitId}`;
+    return;
+  }
+  topbarTitle.textContent = `${visit.customer || "Besøk"} · ＃${point.number}`;
+  view.innerHTML = "";
+  view.appendChild(clone("tpl-point-detail"));
+
+  document.querySelector(".point-header-badge").textContent = `＃${point.number}`;
+  const fPointTitle = document.getElementById("fPointTitle");
+  fPointTitle.value = point.title || "";
+  let titleTimeout = null;
+  fPointTitle.addEventListener("input", () => {
+    clearTimeout(titleTimeout);
+    titleTimeout = setTimeout(async () => {
+      await db.updatePointTitle(pointId, fPointTitle.value);
+      scheduleSync();
+    }, 400);
+  });
+
   // ---- tabs ----
   const tabBtns = [...document.querySelectorAll(".tab-btn")];
   const panels = [...document.querySelectorAll(".tab-panel")];
@@ -251,26 +324,23 @@ async function showDetail(visitId) {
     });
   });
 
-  await Promise.all([renderNotes(visitId), renderPhotos(visitId), renderAudio(visitId)]);
+  await Promise.all([renderNotes(pointId, visitId), renderPhotos(pointId, visitId), renderAudio(pointId, visitId)]);
 
-  document.getElementById("btnDeleteVisit").addEventListener("click", async () => {
-    if (!confirm("Slette dette besøket og alt innhold (bilder, notater, lyd)? Dette kan ikke angres.")) return;
-    await db.deleteVisit(visitId);
+  document.getElementById("btnDeletePoint").addEventListener("click", async () => {
+    if (!confirm(`Slette punkt ＃${point.number} og alt innhold (bilder, notater, lyd)? Dette kan ikke angres.`)) return;
+    await db.deletePoint(pointId);
     scheduleSync(200);
-    location.hash = "#/";
-  });
-  document.getElementById("btnOpenReport").addEventListener("click", () => {
-    location.hash = `#/visit/${visitId}/report`;
+    location.hash = `#/visit/${visitId}`;
   });
 }
 
-async function renderNotes(visitId) {
+async function renderNotes(pointId, visitId) {
   const listEl = document.getElementById("noteList");
   const input = document.getElementById("noteInput");
   const btnAdd = document.getElementById("btnAddNote");
 
   async function refresh() {
-    const notes = await db.listNotes(visitId);
+    const notes = await db.listNotes(pointId);
     listEl.innerHTML = "";
     for (const n of notes) {
       const row = clone("tpl-note-item");
@@ -291,7 +361,7 @@ async function renderNotes(visitId) {
   btnAdd.addEventListener("click", async () => {
     const text = input.value.trim();
     if (!text) return;
-    await db.addNote(visitId, text);
+    await db.addNote(pointId, visitId, text);
     input.value = "";
     scheduleSync();
     refresh();
@@ -300,12 +370,12 @@ async function renderNotes(visitId) {
   await refresh();
 }
 
-async function renderPhotos(visitId) {
+async function renderPhotos(pointId, visitId) {
   const listEl = document.getElementById("photoList");
   const input = document.getElementById("photoInput");
 
   async function refresh() {
-    const photos = await db.listPhotos(visitId);
+    const photos = await db.listPhotos(pointId);
     listEl.innerHTML = "";
     for (const p of photos) {
       const row = clone("tpl-photo-item");
@@ -333,7 +403,7 @@ async function renderPhotos(visitId) {
   input.addEventListener("change", async () => {
     const files = [...input.files];
     for (const file of files) {
-      await db.addPhoto(visitId, file);
+      await db.addPhoto(pointId, visitId, file);
     }
     input.value = "";
     scheduleSync();
@@ -344,13 +414,13 @@ async function renderPhotos(visitId) {
   await refresh();
 }
 
-async function renderAudio(visitId) {
+async function renderAudio(pointId, visitId) {
   const listEl = document.getElementById("audioList");
   const btnRecord = document.getElementById("btnRecord");
   const timerEl = document.getElementById("recordTimer");
 
   async function refresh() {
-    const clips = await db.listAudio(visitId);
+    const clips = await db.listAudio(pointId);
     listEl.innerHTML = "";
     for (const a of clips) {
       const row = clone("tpl-audio-item");
@@ -383,7 +453,7 @@ async function renderAudio(visitId) {
       btnRecord.textContent = "🎙️ Start opptak";
       const result = await recorder.stop();
       if (result && result.blob.size > 0) {
-        await db.addAudio(visitId, result.blob, result.duration);
+        await db.addAudio(pointId, visitId, result.blob, result.duration);
         scheduleSync();
         refresh();
         toast("Lydopptak lagret");
@@ -419,15 +489,21 @@ async function showReport(visitId) {
   view.innerHTML = "";
   view.appendChild(clone("tpl-report"));
 
-  const [notes, photosRaw, audioRaw] = await Promise.all([
-    db.listNotes(visitId),
-    db.listPhotos(visitId),
-    db.listAudio(visitId),
-  ]);
-  const photos = photosRaw.map((p) => ({ ...p, url: trackUrl(URL.createObjectURL(p.blob)) }));
-  const audioClips = audioRaw.map((a) => ({ ...a, url: trackUrl(URL.createObjectURL(a.blob)) }));
+  const rawPoints = await db.listPoints(visitId);
+  const points = await Promise.all(
+    rawPoints.map(async (point) => {
+      const [notes, photosRaw, audioRaw] = await Promise.all([
+        db.listNotes(point.id),
+        db.listPhotos(point.id),
+        db.listAudio(point.id),
+      ]);
+      const photos = photosRaw.map((p) => ({ ...p, url: trackUrl(URL.createObjectURL(p.blob)) }));
+      const audioClips = audioRaw.map((a) => ({ ...a, url: trackUrl(URL.createObjectURL(a.blob)) }));
+      return { ...point, notes, photos, audioClips };
+    })
+  );
 
-  document.getElementById("reportContent").innerHTML = renderReport(visit, notes, photos, audioClips);
+  document.getElementById("reportContent").innerHTML = renderReport(visit, points);
 
   document.getElementById("btnPrint").addEventListener("click", async () => {
     window.print();

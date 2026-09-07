@@ -15,19 +15,33 @@ create table if not exists visits (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists points (
+  id uuid primary key default uuid_generate_v4(),
+  visit_id uuid not null references visits(id) on delete cascade,
+  user_id uuid not null default auth.uid(),
+  number int not null,
+  title text,
+  deleted boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists notes (
   id uuid primary key default uuid_generate_v4(),
   visit_id uuid not null references visits(id) on delete cascade,
+  point_id uuid references points(id) on delete cascade,
   user_id uuid not null default auth.uid(),
   text text,
   deleted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table notes add column if not exists point_id uuid references points(id) on delete cascade;
 
 create table if not exists photos (
   id uuid primary key default uuid_generate_v4(),
   visit_id uuid not null references visits(id) on delete cascade,
+  point_id uuid references points(id) on delete cascade,
   user_id uuid not null default auth.uid(),
   storage_path text not null,
   caption text,
@@ -35,10 +49,12 @@ create table if not exists photos (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table photos add column if not exists point_id uuid references points(id) on delete cascade;
 
 create table if not exists audio_clips (
   id uuid primary key default uuid_generate_v4(),
   visit_id uuid not null references visits(id) on delete cascade,
+  point_id uuid references points(id) on delete cascade,
   user_id uuid not null default auth.uid(),
   storage_path text not null,
   duration int,
@@ -47,14 +63,19 @@ create table if not exists audio_clips (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table audio_clips add column if not exists point_id uuid references points(id) on delete cascade;
 
 alter table visits enable row level security;
+alter table points enable row level security;
 alter table notes enable row level security;
 alter table photos enable row level security;
 alter table audio_clips enable row level security;
 
 drop policy if exists "own visits" on visits;
 create policy "own visits" on visits for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "own points" on points;
+create policy "own points" on points for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists "own notes" on notes;
 create policy "own notes" on notes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

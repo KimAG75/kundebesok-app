@@ -132,6 +132,53 @@ main#view { flex: 1; padding: 12px; padding-bottom: 32px; }
   background: #fff;
 }
 
+.section-heading-row { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px; }
+.section-heading-row h2 { margin: 0; font-size: 1rem; }
+.btn-hash { font-weight: 600; }
+
+.point-list { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.point-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.point-badge {
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: center;
+  font-weight: 700;
+  color: #fff;
+  background: var(--brand-2);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+.point-title { flex: 1; font-size: 0.92rem; }
+.point-summary { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+
+.point-header-card { display: flex; align-items: center; gap: 10px; }
+.point-header-badge {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: #fff;
+  background: var(--brand-2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 1rem;
+}
+.point-header-card input {
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+
 .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .tab-btn {
   flex: 1;
@@ -223,6 +270,17 @@ main#view { flex: 1; padding: 12px; padding-bottom: 32px; }
 .report-meta div span { color: var(--muted); display: block; font-size: 0.72rem; }
 .report-section { margin-bottom: 22px; }
 .report-section h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.report-point { margin-bottom: 28px; break-inside: avoid; }
+.report-point-heading {
+  font-size: 1.05rem;
+  background: var(--brand);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin: 0 0 12px;
+}
+.report-subsection { margin-bottom: 14px; }
+.report-subsection h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 6px; border-bottom: 1px solid var(--border); padding-bottom: 3px; }
 .report-note { padding: 8px 0; border-bottom: 1px dashed var(--border); white-space: pre-wrap; }
 .report-note:last-child { border-bottom: none; }
 .report-note time { display: block; font-size: 0.72rem; color: var(--muted); margin-bottom: 2px; }

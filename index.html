@@ -107,6 +107,35 @@
       </label>
     </div>
 
+    <div class="section-heading-row">
+      <h2>Punkter</h2>
+      <button id="btnAddPoint" class="btn btn-primary btn-hash">＃ Nytt punkt</button>
+    </div>
+    <ul id="pointList" class="point-list"></ul>
+    <p id="pointEmptyState" class="empty-state" hidden>Ingen punkter ennå. Trykk "＃ Nytt punkt" for å legge til det første.</p>
+
+    <div class="detail-actions">
+      <button id="btnDeleteVisit" class="btn btn-danger">Slett besøk</button>
+      <button id="btnOpenReport" class="btn btn-accent">Åpne rapport →</button>
+    </div>
+  </section>
+</template>
+
+<template id="tpl-point-item">
+  <li class="point-card" tabindex="0">
+    <span class="point-badge"></span>
+    <span class="point-title"></span>
+    <span class="point-summary"></span>
+  </li>
+</template>
+
+<template id="tpl-point-detail">
+  <section class="screen screen-point-detail">
+    <div class="card point-header-card">
+      <span class="point-header-badge"></span>
+      <input type="text" id="fPointTitle" placeholder="Beskrivelse av punktet (valgfritt)">
+    </div>
+
     <nav class="tabs">
       <button class="tab-btn active" data-tab="notes">Notater</button>
       <button class="tab-btn" data-tab="photos">Bilder</button>
@@ -140,8 +169,7 @@
     </div>
 
     <div class="detail-actions">
-      <button id="btnDeleteVisit" class="btn btn-danger">Slett besøk</button>
-      <button id="btnOpenReport" class="btn btn-accent">Åpne rapport →</button>
+      <button id="btnDeletePoint" class="btn btn-danger">Slett punkt</button>
     </div>
   </section>
 </template>

@@ -16,7 +16,9 @@ function esc(str) {
   return (str || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-export function renderReport(visit, notes, photos, audioClips) {
+function renderPoint(point) {
+  const { notes, photos, audioClips } = point;
+
   const notesHtml = notes.length
     ? notes.map((n) => `<div class="report-note"><time>${fmtDate(n.createdAt)}</time>${esc(n.text)}</div>`).join("")
     : `<p class="report-note">Ingen notater.</p>`;
@@ -40,9 +42,32 @@ export function renderReport(visit, notes, photos, audioClips) {
             <span>${esc(a.label) || "Lydnotat"} (${formatDuration(a.duration)})</span>
           </div>`
         )
-        .join("") +
-      (audioClips.length ? `<p class="only-print" style="display:none">${audioClips.length} lydopptak er vedlagt digitalt (ikke inkludert i utskrift).</p>` : "")
+        .join("")
     : `<p>Ingen lydopptak.</p>`;
+
+  return `
+    <section class="report-point">
+      <h3 class="report-point-heading">＃${point.number}${point.title ? ` — ${esc(point.title)}` : ""}</h3>
+      <div class="report-subsection">
+        <h4>Notater</h4>
+        ${notesHtml}
+      </div>
+      <div class="report-subsection">
+        <h4>Bilder</h4>
+        ${photosHtml}
+      </div>
+      <div class="report-subsection">
+        <h4>Lydopptak</h4>
+        ${audioHtml}
+      </div>
+    </section>
+  `;
+}
+
+export function renderReport(visit, points) {
+  const pointsHtml = points.length
+    ? points.map(renderPoint).join("")
+    : `<p>Ingen punkter registrert for dette besøket.</p>`;
 
   return `
     <h2>Servicerapport – ${esc(visit.customer) || "Uten navn"}</h2>
@@ -54,19 +79,6 @@ export function renderReport(visit, notes, photos, audioClips) {
       <div><span>Tekniker</span>${esc(visit.tekniker) || "–"}</div>
     </div>
 
-    <section class="report-section">
-      <h3>Notater</h3>
-      ${notesHtml}
-    </section>
-
-    <section class="report-section">
-      <h3>Bilder</h3>
-      ${photosHtml}
-    </section>
-
-    <section class="report-section">
-      <h3>Lydopptak</h3>
-      ${audioHtml}
-    </section>
+    ${pointsHtml}
   `;
 }

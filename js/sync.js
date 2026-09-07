@@ -57,12 +57,32 @@ async function pushVisits(userId) {
   }
 }
 
+async function pushPoints(userId) {
+  const dirty = await db.getDirty("points");
+  for (const p of dirty) {
+    const row = {
+      id: p.id,
+      visit_id: p.visitId,
+      user_id: userId,
+      number: p.number,
+      title: p.title || "",
+      deleted: !!p.deleted,
+      created_at: p.createdAt,
+      updated_at: p.updatedAt,
+    };
+    const { error } = await supabase.from("points").upsert(row);
+    if (!error) await db.clearDirty("points", p.id);
+    else console.error("push point failed", error);
+  }
+}
+
 async function pushNotes(userId) {
   const dirty = await db.getDirty("notes");
   for (const n of dirty) {
     const row = {
       id: n.id,
       visit_id: n.visitId,
+      point_id: n.pointId,
       user_id: userId,
       text: n.text || "",
       deleted: !!n.deleted,
@@ -95,6 +115,7 @@ async function pushPhotos(userId) {
     const row = {
       id: p.id,
       visit_id: p.visitId,
+      point_id: p.pointId,
       user_id: userId,
       storage_path: storagePath,
       caption: p.caption || "",
@@ -128,6 +149,7 @@ async function pushAudio(userId) {
     const row = {
       id: a.id,
       visit_id: a.visitId,
+      point_id: a.pointId,
       user_id: userId,
       storage_path: storagePath,
       duration: a.duration || 0,
@@ -162,6 +184,24 @@ async function pullVisits(userId) {
   }
 }
 
+async function pullPoints(userId) {
+  const { data, error } = await supabase.from("points").select("*").eq("user_id", userId);
+  if (error) throw error;
+  for (const row of data) {
+    const local = await db.getById("points", row.id);
+    if (!newer(row.updated_at, local)) continue;
+    await db.putFromRemote("points", {
+      id: row.id,
+      visitId: row.visit_id,
+      number: row.number,
+      title: row.title,
+      deleted: row.deleted,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    });
+  }
+}
+
 async function pullNotes(userId) {
   const { data, error } = await supabase.from("notes").select("*").eq("user_id", userId);
   if (error) throw error;
@@ -171,6 +211,7 @@ async function pullNotes(userId) {
     await db.putFromRemote("notes", {
       id: row.id,
       visitId: row.visit_id,
+      pointId: row.point_id,
       text: row.text,
       deleted: row.deleted,
       createdAt: row.created_at,
@@ -197,6 +238,7 @@ async function pullPhotos(userId) {
     await db.putFromRemote("photos", {
       id: row.id,
       visitId: row.visit_id,
+      pointId: row.point_id,
       blob,
       caption: row.caption,
       storagePath: row.storage_path,
@@ -225,6 +267,7 @@ async function pullAudio(userId) {
     await db.putFromRemote("audio", {
       id: row.id,
       visitId: row.visit_id,
+      pointId: row.point_id,
       blob,
       duration: row.duration,
       label: row.label,
@@ -246,10 +289,12 @@ export async function syncAll() {
   setStatus({ state: "syncing" });
   try {
     await pushVisits(currentUserId);
+    await pushPoints(currentUserId);
     await pushNotes(currentUserId);
     await pushPhotos(currentUserId);
     await pushAudio(currentUserId);
     await pullVisits(currentUserId);
+    await pullPoints(currentUserId);
     await pullNotes(currentUserId);
     await pullPhotos(currentUserId);
     await pullAudio(currentUserId);

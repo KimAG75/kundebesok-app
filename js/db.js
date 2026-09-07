@@ -1,5 +1,5 @@
 const DB_NAME = "kundebesok-db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -9,20 +9,38 @@ function openDb() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
+      const t = req.transaction;
+
       if (!db.objectStoreNames.contains("visits")) {
         db.createObjectStore("visits", { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains("points")) {
+        const s = db.createObjectStore("points", { keyPath: "id" });
+        s.createIndex("visitId", "visitId");
       }
       if (!db.objectStoreNames.contains("notes")) {
         const s = db.createObjectStore("notes", { keyPath: "id" });
         s.createIndex("visitId", "visitId");
+        s.createIndex("pointId", "pointId");
+      } else {
+        const s = t.objectStore("notes");
+        if (!s.indexNames.contains("pointId")) s.createIndex("pointId", "pointId");
       }
       if (!db.objectStoreNames.contains("photos")) {
         const s = db.createObjectStore("photos", { keyPath: "id" });
         s.createIndex("visitId", "visitId");
+        s.createIndex("pointId", "pointId");
+      } else {
+        const s = t.objectStore("photos");
+        if (!s.indexNames.contains("pointId")) s.createIndex("pointId", "pointId");
       }
       if (!db.objectStoreNames.contains("audio")) {
         const s = db.createObjectStore("audio", { keyPath: "id" });
         s.createIndex("visitId", "visitId");
+        s.createIndex("pointId", "pointId");
+      } else {
+        const s = t.objectStore("audio");
+        if (!s.indexNames.contains("pointId")) s.createIndex("pointId", "pointId");
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -48,6 +66,23 @@ function newId() {
 
 function now() {
   return new Date().toISOString();
+}
+
+async function byIndex(storeName, indexName, value) {
+  const store = await tx(storeName, "readonly");
+  const idx = store.index(indexName);
+  return wrap(idx.getAll(value));
+}
+
+async function softDeleteAllByIndex(storeName, indexName, value) {
+  const items = await byIndex(storeName, indexName, value);
+  const store = await tx(storeName, "readwrite");
+  for (const item of items) {
+    item.deleted = true;
+    item.dirty = true;
+    item.updatedAt = now();
+    await wrap(store.put(item));
+  }
 }
 
 export const db = {
@@ -126,33 +161,73 @@ export const db = {
       visit.updatedAt = now();
       await wrap(store.put(visit));
     }
-    for (const storeName of ["notes", "photos", "audio"]) {
-      const items = await this._byVisit(storeName, id);
-      const s = await tx(storeName, "readwrite");
-      for (const item of items) {
-        item.deleted = true;
-        item.dirty = true;
-        item.updatedAt = now();
-        await wrap(s.put(item));
-      }
+    const points = await byIndex("points", "visitId", id);
+    for (const point of points) {
+      await this.deletePoint(point.id);
     }
   },
 
-  async _byVisit(storeName, visitId) {
-    const store = await tx(storeName, "readonly");
-    const idx = store.index("visitId");
-    return wrap(idx.getAll(visitId));
+  // ---- points ----
+  listPoints(visitId) {
+    return byIndex("points", "visitId", visitId).then((items) =>
+      items.filter((p) => !p.deleted).sort((a, b) => a.number - b.number)
+    );
+  },
+  async getPoint(id) {
+    const store = await tx("points", "readonly");
+    const p = await wrap(store.get(id));
+    return p && !p.deleted ? p : null;
+  },
+  async createPoint(visitId) {
+    const existing = await byIndex("points", "visitId", visitId);
+    const nextNumber = existing.reduce((max, p) => Math.max(max, p.number || 0), 0) + 1;
+    const point = {
+      id: newId(),
+      visitId,
+      number: nextNumber,
+      title: "",
+      deleted: false,
+      dirty: true,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    const store = await tx("points", "readwrite");
+    await wrap(store.put(point));
+    return point;
+  },
+  async updatePointTitle(id, title) {
+    const store = await tx("points", "readwrite");
+    const point = await wrap(store.get(id));
+    if (!point) return;
+    point.title = title;
+    point.dirty = true;
+    point.updatedAt = now();
+    await wrap(store.put(point));
+  },
+  async deletePoint(id) {
+    const store = await tx("points", "readwrite");
+    const point = await wrap(store.get(id));
+    if (point) {
+      point.deleted = true;
+      point.dirty = true;
+      point.updatedAt = now();
+      await wrap(store.put(point));
+    }
+    for (const storeName of ["notes", "photos", "audio"]) {
+      await softDeleteAllByIndex(storeName, "pointId", id);
+    }
   },
 
   // ---- notes ----
-  listNotes(visitId) {
-    return this._byVisit("notes", visitId).then((items) =>
+  listNotes(pointId) {
+    return byIndex("notes", "pointId", pointId).then((items) =>
       items.filter((n) => !n.deleted).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     );
   },
-  async addNote(visitId, text) {
+  async addNote(pointId, visitId, text) {
     const note = {
       id: newId(),
+      pointId,
       visitId,
       text,
       deleted: false,
@@ -175,14 +250,15 @@ export const db = {
   },
 
   // ---- photos ----
-  listPhotos(visitId) {
-    return this._byVisit("photos", visitId).then((items) =>
+  listPhotos(pointId) {
+    return byIndex("photos", "pointId", pointId).then((items) =>
       items.filter((p) => !p.deleted).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     );
   },
-  async addPhoto(visitId, blob, caption = "") {
+  async addPhoto(pointId, visitId, blob, caption = "") {
     const photo = {
       id: newId(),
+      pointId,
       visitId,
       blob,
       caption,
@@ -216,14 +292,15 @@ export const db = {
   },
 
   // ---- audio ----
-  listAudio(visitId) {
-    return this._byVisit("audio", visitId).then((items) =>
+  listAudio(pointId) {
+    return byIndex("audio", "pointId", pointId).then((items) =>
       items.filter((a) => !a.deleted).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     );
   },
-  async addAudio(visitId, blob, duration, label = "") {
+  async addAudio(pointId, visitId, blob, duration, label = "") {
     const clip = {
       id: newId(),
+      pointId,
       visitId,
       blob,
       duration,
