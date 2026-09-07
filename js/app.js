@@ -543,8 +543,21 @@ async function showReport(visitId) {
 }
 
 // ---------------------------------------------------------------- service worker
+// Reload once a new service worker takes over, so an app update (new
+// features, bug fixes) shows up automatically instead of needing the user
+// to manually clear their cache.
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+  let reloadedForUpdate = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloadedForUpdate) return;
+    reloadedForUpdate = true;
+    location.reload();
+  });
+  window.addEventListener("load", async () => {
+    const reg = await navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => null);
+    if (!reg) return;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") reg.update().catch(() => {});
+    });
   });
 }
