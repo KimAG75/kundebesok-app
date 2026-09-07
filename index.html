@@ -18,7 +18,9 @@
   <header class="topbar">
     <button id="btnBack" class="icon-btn" hidden aria-label="Tilbake">←</button>
     <h1 id="topbarTitle">Kundebesøk</h1>
-    <button id="btnNewVisit" class="icon-btn" aria-label="Nytt besøk">＋</button>
+    <span id="syncStatus" class="sync-status" hidden></span>
+    <button id="btnAccount" class="icon-btn" hidden aria-label="Konto">👤</button>
+    <button id="btnNewVisit" class="icon-btn" hidden aria-label="Nytt besøk">＋</button>
   </header>
 
   <main id="view"></main>
@@ -27,6 +29,26 @@
 </div>
 
 <!-- ===================== TEMPLATES ===================== -->
+
+<template id="tpl-auth">
+  <section class="screen screen-auth">
+    <div class="card auth-card">
+      <h2>Kundebesøk</h2>
+      <p class="auth-sub">Logg inn for å synkronisere besøk mellom enhetene dine.</p>
+      <label>E-post
+        <input type="email" id="authEmail" autocomplete="username" placeholder="deg@eksempel.no">
+      </label>
+      <label>Passord
+        <input type="password" id="authPassword" autocomplete="current-password" placeholder="Minst 6 tegn">
+      </label>
+      <p id="authError" class="auth-error" hidden></p>
+      <div class="auth-actions">
+        <button id="btnSignIn" class="btn btn-primary">Logg inn</button>
+        <button id="btnSignUp" class="btn">Opprett bruker</button>
+      </div>
+    </div>
+  </section>
+</template>
 
 <template id="tpl-list">
   <section class="screen screen-list">

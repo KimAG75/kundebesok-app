@@ -1,16 +1,21 @@
 import { db } from "./db.js";
 import { AudioRecorder, formatDuration } from "./audio.js";
 import { renderReport } from "./report.js";
+import { supabase } from "./supabaseClient.js";
+import { onDataChanged, onStatusChange, scheduleSync, setCurrentUser, syncAll } from "./sync.js";
 
 const view = document.getElementById("view");
 const topbarTitle = document.getElementById("topbarTitle");
 const btnBack = document.getElementById("btnBack");
 const btnNewVisit = document.getElementById("btnNewVisit");
+const btnAccount = document.getElementById("btnAccount");
+const syncStatusEl = document.getElementById("syncStatus");
 const toastEl = document.getElementById("toast");
 
 let activeObjectUrls = [];
 let recorder = new AudioRecorder();
 let recordTimerHandle = null;
+let currentUser = null;
 
 function toast(msg) {
   toastEl.textContent = msg;
@@ -33,21 +38,97 @@ function clone(tplId) {
   return document.getElementById(tplId).content.firstElementChild.cloneNode(true);
 }
 
+// ---------------------------------------------------------------- sync status UI
+const SYNC_LABEL = {
+  syncing: "🔄 Synkroniserer…",
+  offline: "📴 Offline",
+  error: "⚠️ Synk-feil",
+};
+onDataChanged(() => {
+  // Only auto-refresh the list screen; leave detail/report screens alone so we
+  // don't clobber input focus or scroll position while the user is editing.
+  if (currentUser && (!location.hash || location.hash === "#/")) route();
+});
+onStatusChange((s) => {
+  syncStatusEl.hidden = false;
+  if (s.state === "synced") {
+    syncStatusEl.textContent = `✅ Synk ${s.at.toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" })}`;
+  } else {
+    syncStatusEl.textContent = SYNC_LABEL[s.state] || "";
+  }
+});
+
+// ---------------------------------------------------------------- auth
+async function showAuth(message) {
+  view.innerHTML = "";
+  topbarTitle.textContent = "Kundebesøk";
+  btnBack.hidden = true;
+  btnNewVisit.hidden = true;
+  btnAccount.hidden = true;
+  syncStatusEl.hidden = true;
+  view.appendChild(clone("tpl-auth"));
+
+  const emailEl = document.getElementById("authEmail");
+  const passEl = document.getElementById("authPassword");
+  const errEl = document.getElementById("authError");
+  if (message) {
+    errEl.textContent = message;
+    errEl.hidden = false;
+  }
+
+  function showError(err) {
+    errEl.textContent = err;
+    errEl.hidden = false;
+  }
+
+  document.getElementById("btnSignIn").addEventListener("click", async () => {
+    errEl.hidden = true;
+    const { error } = await supabase.auth.signInWithPassword({ email: emailEl.value.trim(), password: passEl.value });
+    if (error) showError(oversettAuthFeil(error.message));
+  });
+
+  document.getElementById("btnSignUp").addEventListener("click", async () => {
+    errEl.hidden = true;
+    const { error } = await supabase.auth.signUp({ email: emailEl.value.trim(), password: passEl.value });
+    if (error) showError(oversettAuthFeil(error.message));
+    else showError("Bruker opprettet. Sjekk e-posten din for bekreftelse, eller logg inn direkte hvis bekreftelse ikke kreves.");
+  });
+}
+
+function oversettAuthFeil(msg) {
+  if (/invalid login credentials/i.test(msg)) return "Feil e-post eller passord.";
+  if (/password should be at least/i.test(msg)) return "Passordet må være minst 6 tegn.";
+  if (/user already registered/i.test(msg)) return "Denne e-posten er allerede registrert. Prøv å logge inn.";
+  return msg;
+}
+
+btnAccount.addEventListener("click", async () => {
+  const email = currentUser?.email || "";
+  if (confirm(`Logget inn som ${email}\n\nTrykk OK for å logge ut.`)) {
+    await supabase.auth.signOut();
+  }
+});
+
+supabase.auth.onAuthStateChange((_event, session) => {
+  currentUser = session?.user || null;
+  if (currentUser) {
+    setCurrentUser(currentUser.id);
+    btnAccount.hidden = false;
+    syncAll();
+    route();
+  } else {
+    setCurrentUser(null);
+    showAuth();
+  }
+});
+
 // ---------------------------------------------------------------- router
-window.addEventListener("hashchange", route);
-window.addEventListener("DOMContentLoaded", route);
+window.addEventListener("hashchange", () => {
+  if (currentUser) route();
+});
 btnNewVisit.addEventListener("click", async () => {
-  const visit = {
-    id: db.newId(),
-    customer: "",
-    date: new Date().toISOString().slice(0, 16),
-    location: "",
-    tekniker: "",
-    status: "planlagt",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  await db.saveVisit(visit);
+  const visit = await db.createVisit();
+  scheduleSync(200);
   location.hash = `#/visit/${visit.id}`;
 });
 btnBack.addEventListener("click", () => history.back());
@@ -149,9 +230,9 @@ async function showDetail(visitId) {
     visit.date = fDate.value;
     visit.location = fLocation.value;
     visit.tekniker = fTekniker.value;
-    visit.updatedAt = new Date().toISOString();
     await db.saveVisit(visit);
     topbarTitle.textContent = visit.customer || "Nytt besøk";
+    scheduleSync();
   }
   function scheduleSave() {
     clearTimeout(saveTimeout);
@@ -175,6 +256,7 @@ async function showDetail(visitId) {
   document.getElementById("btnDeleteVisit").addEventListener("click", async () => {
     if (!confirm("Slette dette besøket og alt innhold (bilder, notater, lyd)? Dette kan ikke angres.")) return;
     await db.deleteVisit(visitId);
+    scheduleSync(200);
     location.hash = "#/";
   });
   document.getElementById("btnOpenReport").addEventListener("click", () => {
@@ -199,6 +281,7 @@ async function renderNotes(visitId) {
       });
       row.querySelector(".btn-del").addEventListener("click", async () => {
         await db.deleteNote(n.id);
+        scheduleSync();
         refresh();
       });
       listEl.appendChild(row);
@@ -210,6 +293,7 @@ async function renderNotes(visitId) {
     if (!text) return;
     await db.addNote(visitId, text);
     input.value = "";
+    scheduleSync();
     refresh();
   });
 
@@ -232,10 +316,14 @@ async function renderPhotos(visitId) {
       let t = null;
       captionInput.addEventListener("input", () => {
         clearTimeout(t);
-        t = setTimeout(() => db.updatePhotoCaption(p.id, captionInput.value), 400);
+        t = setTimeout(async () => {
+          await db.updatePhotoCaption(p.id, captionInput.value);
+          scheduleSync();
+        }, 400);
       });
       row.querySelector(".btn-del").addEventListener("click", async () => {
         await db.deletePhoto(p.id);
+        scheduleSync();
         refresh();
       });
       listEl.appendChild(row);
@@ -248,6 +336,7 @@ async function renderPhotos(visitId) {
       await db.addPhoto(visitId, file);
     }
     input.value = "";
+    scheduleSync();
     refresh();
     toast(files.length > 1 ? `${files.length} bilder lagt til` : "Bilde lagt til");
   });
@@ -272,10 +361,14 @@ async function renderAudio(visitId) {
       let t = null;
       labelInput.addEventListener("input", () => {
         clearTimeout(t);
-        t = setTimeout(() => db.updateAudioLabel(a.id, labelInput.value), 400);
+        t = setTimeout(async () => {
+          await db.updateAudioLabel(a.id, labelInput.value);
+          scheduleSync();
+        }, 400);
       });
       row.querySelector(".btn-del").addEventListener("click", async () => {
         await db.deleteAudio(a.id);
+        scheduleSync();
         refresh();
       });
       listEl.appendChild(row);
@@ -291,6 +384,7 @@ async function renderAudio(visitId) {
       const result = await recorder.stop();
       if (result && result.blob.size > 0) {
         await db.addAudio(visitId, result.blob, result.duration);
+        scheduleSync();
         refresh();
         toast("Lydopptak lagret");
       }
@@ -339,8 +433,8 @@ async function showReport(visitId) {
     window.print();
     if (visit.status !== "sendt") {
       visit.status = "gjennomfort";
-      visit.updatedAt = new Date().toISOString();
       await db.saveVisit(visit);
+      scheduleSync();
     }
   });
 
@@ -366,8 +460,8 @@ async function showReport(visitId) {
     );
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
     visit.status = "sendt";
-    visit.updatedAt = new Date().toISOString();
     await db.saveVisit(visit);
+    scheduleSync();
     toast("Status satt til 'Rapport sendt'");
   });
 }

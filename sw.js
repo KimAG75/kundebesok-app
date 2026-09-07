@@ -7,6 +7,8 @@ const APP_SHELL = [
   "./js/db.js",
   "./js/audio.js",
   "./js/report.js",
+  "./js/supabaseClient.js",
+  "./js/sync.js",
   "./manifest.json",
   "./icons/icon.svg",
 ];
