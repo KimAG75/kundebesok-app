@@ -101,6 +101,13 @@ export const db = {
     rec.dirty = false;
     await wrap(store.put(rec));
   },
+  async updateBlob(storeName, id, blob) {
+    const store = await tx(storeName, "readwrite");
+    const rec = await wrap(store.get(id));
+    if (!rec) return;
+    rec.blob = blob;
+    await wrap(store.put(rec));
+  },
   async setStoragePath(storeName, id, storagePath) {
     const store = await tx(storeName, "readwrite");
     const rec = await wrap(store.get(id));

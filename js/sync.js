@@ -1,5 +1,8 @@
 import { supabase } from "./supabaseClient.js";
 import { db } from "./db.js";
+import { compressImage } from "./image.js";
+
+const MAX_UPLOAD_BLOB_BYTES = 400_000;
 
 let statusListeners = [];
 export function onStatusChange(cb) {
@@ -100,11 +103,19 @@ async function pushPhotos(userId) {
   for (const p of dirty) {
     let storagePath = p.storagePath;
     if (!storagePath && p.blob && !p.deleted) {
-      const ext = (p.blob.type && p.blob.type.split("/")[1]) || "jpg";
+      let blob = p.blob;
+      // Large blobs (full-res camera photos stored before compression was
+      // added, or from a device that skipped it) are slow/unreliable to
+      // upload over a weak connection - shrink before every attempt.
+      if (blob.size > MAX_UPLOAD_BLOB_BYTES) {
+        blob = await compressImage(blob);
+        await db.updateBlob("photos", p.id, blob);
+      }
+      const ext = (blob.type && blob.type.split("/")[1].split(";")[0]) || "jpg";
       storagePath = `${userId}/${p.visitId}/${p.id}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from("media")
-        .upload(storagePath, p.blob, { upsert: true, contentType: p.blob.type || "image/jpeg" });
+        .upload(storagePath, blob, { upsert: true, contentType: blob.type || "image/jpeg" });
       if (upErr) {
         console.error("photo upload failed", upErr);
         continue;
