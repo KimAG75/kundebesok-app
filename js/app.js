@@ -548,15 +548,17 @@ async function showReport(visitId) {
 }
 
 // ---------------------------------------------------------------- service worker
-// Reload once a new service worker takes over, so an app update (new
-// features, bug fixes) shows up automatically instead of needing the user
-// to manually clear their cache.
+// Offer an update instead of forcing it. Reloading the instant a new service
+// worker takes over can land mid-keystroke or mid-save (e.g. while adding a
+// note) and discard work that hadn't reached IndexedDB yet, so we only ever
+// prompt - the user decides when it's safe to reload.
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  let reloadedForUpdate = false;
+  const hadControllerAtLoad = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloadedForUpdate) return;
-    reloadedForUpdate = true;
-    location.reload();
+    if (!hadControllerAtLoad) return; // first-ever install, not an update
+    const banner = document.getElementById("updateBanner");
+    banner.hidden = false;
+    document.getElementById("btnReloadUpdate").addEventListener("click", () => location.reload(), { once: true });
   });
   window.addEventListener("load", async () => {
     const reg = await navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => null);

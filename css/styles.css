@@ -306,6 +306,28 @@ main#view { flex: 1; padding: 12px; padding-bottom: 32px; }
   z-index: 50;
 }
 
+/* ---------- update banner ---------- */
+.update-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--brand);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.88rem;
+}
+.update-banner .btn { flex-shrink: 0; }
+
 /* ---------- auth screen ---------- */
 .screen-auth { display: flex; justify-content: center; padding-top: 40px; }
 .auth-card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
