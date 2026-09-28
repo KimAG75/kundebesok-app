@@ -1,6 +1,7 @@
 import { db } from "./db.js";
 import { AudioRecorder, formatDuration } from "./audio.js";
 import { renderReport } from "./report.js";
+import { compressImage } from "./image.js";
 import { supabase } from "./supabaseClient.js";
 import { onDataChanged, onStatusChange, scheduleSync, setCurrentUser, syncAll } from "./sync.js";
 
@@ -53,6 +54,8 @@ onStatusChange((s) => {
   syncStatusEl.hidden = false;
   if (s.state === "synced") {
     syncStatusEl.textContent = `✅ Synk ${s.at.toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" })}`;
+  } else if (s.state === "pending") {
+    syncStatusEl.textContent = `⏳ ${s.count} venter på opplasting`;
   } else {
     syncStatusEl.textContent = SYNC_LABEL[s.state] || "";
   }
@@ -402,12 +405,14 @@ async function renderPhotos(pointId, visitId) {
 
   input.addEventListener("change", async () => {
     const files = [...input.files];
-    for (const file of files) {
-      await db.addPhoto(pointId, visitId, file);
-    }
     input.value = "";
+    toast(files.length > 1 ? `Behandler ${files.length} bilder…` : "Behandler bilde…");
+    for (const file of files) {
+      const compressed = await compressImage(file);
+      await db.addPhoto(pointId, visitId, compressed);
+      refresh();
+    }
     scheduleSync();
-    refresh();
     toast(files.length > 1 ? `${files.length} bilder lagt til` : "Bilde lagt til");
   });
 

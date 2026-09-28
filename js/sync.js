@@ -326,7 +326,18 @@ export async function syncAll() {
       await pushPhotos(currentUserId);
       await pushAudio(currentUserId);
     }
-    setStatus({ state: "synced", at: new Date() });
+    const stillDirty =
+      (await db.getDirty("photos")).length +
+      (await db.getDirty("audio")).length +
+      (await db.getDirty("notes")).length +
+      (await db.getDirty("points")).length +
+      (await db.getDirty("visits")).length;
+    if (stillDirty > 0) {
+      setStatus({ state: "pending", count: stillDirty, at: new Date() });
+      scheduleSync(10000); // retry sooner while something hasn't made it up yet
+    } else {
+      setStatus({ state: "synced", at: new Date() });
+    }
     notifyDataChanged();
   } catch (err) {
     console.error("sync failed", err);
