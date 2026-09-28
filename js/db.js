@@ -116,6 +116,34 @@ export const db = {
     const store = await tx(storeName, "readwrite");
     await wrap(store.put({ ...record, dirty: false }));
   },
+  async getAll(storeName) {
+    const store = await tx(storeName, "readonly");
+    return wrap(store.getAll());
+  },
+  async reassignPoint(storeName, id, pointId) {
+    const store = await tx(storeName, "readwrite");
+    const rec = await wrap(store.get(id));
+    if (!rec) return;
+    rec.pointId = pointId;
+    rec.dirty = true;
+    rec.updatedAt = now();
+    await wrap(store.put(rec));
+  },
+  // Notes/photos/audio created before the "points" feature existed have no
+  // pointId, so they're invisible in the point-scoped UI. Fold them into a
+  // catch-all point per visit so nothing stays orphaned/hidden.
+  async ensureLegacyPoint(visitId) {
+    const LEGACY_TITLE = "Tidligere registreringer";
+    const existing = await byIndex("points", "visitId", visitId);
+    const found = existing.find((p) => p.title === LEGACY_TITLE && !p.deleted);
+    if (found) return found;
+    return this.createPoint(visitId).then(async (point) => {
+      point.title = LEGACY_TITLE;
+      const store = await tx("points", "readwrite");
+      await wrap(store.put(point));
+      return point;
+    });
+  },
 
   // ---- visits ----
   async listVisits() {

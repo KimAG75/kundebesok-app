@@ -279,6 +279,27 @@ async function pullAudio(userId) {
   }
 }
 
+async function migrateOrphans() {
+  let changed = false;
+  for (const storeName of ["notes", "photos", "audio"]) {
+    const all = await db.getAll(storeName);
+    const orphans = all.filter((r) => !r.deleted && !r.pointId && r.visitId);
+    const byVisit = new Map();
+    for (const o of orphans) {
+      if (!byVisit.has(o.visitId)) byVisit.set(o.visitId, []);
+      byVisit.get(o.visitId).push(o);
+    }
+    for (const [visitId, items] of byVisit) {
+      const point = await db.ensureLegacyPoint(visitId);
+      for (const item of items) {
+        await db.reassignPoint(storeName, item.id, point.id);
+      }
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 export async function syncAll() {
   if (syncing || !currentUserId) return;
   if (!navigator.onLine) {
@@ -298,6 +319,13 @@ export async function syncAll() {
     await pullNotes(currentUserId);
     await pullPhotos(currentUserId);
     await pullAudio(currentUserId);
+    const migrated = await migrateOrphans();
+    if (migrated) {
+      await pushPoints(currentUserId);
+      await pushNotes(currentUserId);
+      await pushPhotos(currentUserId);
+      await pushAudio(currentUserId);
+    }
     setStatus({ state: "synced", at: new Date() });
     notifyDataChanged();
   } catch (err) {
